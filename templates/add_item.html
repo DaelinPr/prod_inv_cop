@@ -1,0 +1,28 @@
+{% extends "layout.html" %}
+
+{% block title %}Добавить инвентарь{% endblock %}
+
+{% block content %}
+<h1>Добавить инвентарь</h1>
+<form method="POST">
+    <div class="mb-3">
+        <label class="form-label">Название предмета</label>
+        <input type="text" class="form-control" name="name" required>
+    </div>
+    <div class="mb-3">
+        <label class="form-label">Инвентарный номер</label>
+        <input type="text" class="form-control" name="inventory_number" required>
+    </div>
+    <div class="mb-3">
+        <label class="form-label">Статус</label>
+        <select class="form-select" name="status" required>
+            <option value="Работает">Работает</option>
+            <option value="Не работает">Не работает</option>
+            <option value="Ремонт">Ремонт</option>
+        </select>
+    </div>
+    <button type="submit" class="btn btn-success">Сохранить</button>
+    <a href="/rooms/{{ room_id }}" class="btn btn-secondary">Отмена</a>
+    <a href="/rooms" class="btn btn-info">Список кабинетов</a>
+</form>
+{% endblock %}
