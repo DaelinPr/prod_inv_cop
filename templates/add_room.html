@@ -1,0 +1,31 @@
+{% extends "layout.html" %}
+
+{% block title %}Добавить кабинет{% endblock %}
+
+{% block content %}
+<h1>Добавить кабинет</h1>
+<form method="POST">
+    <div class="mb-3">
+        <label class="form-label">Название кабинета</label>
+        <input type="text" class="form-control" name="name" required>
+    </div>
+    <div class="mb-3">
+        <label class="form-label">Номер кабинета</label>
+        <input type="text" class="form-control" name="number">
+    </div>
+    <div class="mb-3">
+        <label class="form-label">Этаж</label>
+        <input type="text" class="form-control" name="floor">
+    </div>
+    <div class="mb-3">
+        <label class="form-label">Ответственный учитель</label>
+        <input type="text" class="form-control" name="teacher">
+    </div>
+    <div class="mb-3">
+        <label class="form-label">Вместимость</label>
+        <input type="number" class="form-control" name="capacity">
+    </div>
+    <button type="submit" class="btn btn-success">Сохранить</button>
+    <a href="/rooms" class="btn btn-secondary">Отмена</a>
+</form>
+{% endblock %}

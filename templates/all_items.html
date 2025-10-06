@@ -1,0 +1,78 @@
+{% extends "layout.html" %}
+
+{% block title %}Весь инвентарь{% endblock %}
+
+{% block content %}
+<h1>Весь инвентарь</h1>
+
+<form method="get" class="row g-3 mb-4">
+    <div class="col-md-2">
+        <input type="text" class="form-control" name="name" placeholder="Название" value="{{ name }}">
+    </div>
+    <div class="col-md-2">
+        <input type="text" class="form-control" name="inventory_number" placeholder="Инв. номер" value="{{ inventory_number }}">
+    </div>
+    <div class="col-md-2">
+        <select class="form-select" name="status">
+            <option value="">Статус</option>
+            <option value="Работает" {% if status=="Работает" %}selected{% endif %}>Работает</option>
+            <option value="Не работает" {% if status=="Не работает" %}selected{% endif %}>Не работает</option>
+            <option value="Ремонт" {% if status=="Ремонт" %}selected{% endif %}>Ремонт</option>
+        </select>
+    </div>
+    <div class="col-md-2">
+        <input type="text" class="form-control" name="room_name" placeholder="Кабинет" value="{{ room_name }}">
+    </div>
+    <div class="col-md-2">
+        <input type="text" class="form-control" name="room_number" placeholder="Номер кабинета" value="{{ room_number }}">
+    </div>
+    <div class="col-md-2">
+        <button type="submit" class="btn btn-primary w-100">Фильтровать</button>
+    </div>
+    <div class="col-md-2">
+        <a href="/items" class="btn btn-secondary w-100">Сбросить</a>
+    </div>
+    <div class="col-md-2">
+    <a href="{{ url_for('export_items',
+                        name=name,
+                        inventory_number=inventory_number,
+                        status=status,
+                        room_name=room_name,
+                        room_number=room_number) }}"
+       class="btn btn-success w-100">Экспорт в Excel</a>
+</div>
+
+</form>
+
+<table class="table table-striped table-bordered">
+    <thead class="table-dark">
+        <tr>
+            <th>ID</th>
+            <th>Название</th>
+            <th>Инвентарный номер</th>
+            <th>Статус</th>
+            <th>Кабинет</th>
+            <th>Номер кабинета</th>
+            <th>Действия</th>
+        </tr>
+    </thead>
+    <tbody>
+        {% for item in items %}
+        <tr>
+            <td>{{ item[0] }}</td>
+            <td>{{ item[1] }}</td>
+            <td>{{ item[2] }}</td>
+            <td>{{ item[3] }}</td>
+            <td>{{ item[4] }}</td>
+            <td>{{ item[5] }}</td>
+            <td>
+                <a href="/items/{{ item[0] }}/edit/{{ item[6] }}" class="btn btn-warning btn-sm">Редактировать</a>
+                <a href="/items/{{ item[0] }}/delete/{{ item[6] }}" class="btn btn-danger btn-sm">Удалить</a>
+            </td>
+        </tr>
+        {% endfor %}
+    </tbody>
+</table>
+
+<a href="/rooms" class="btn btn-secondary">Назад к кабинетам</a>
+{% endblock %}
