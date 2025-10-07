@@ -1,9 +1,9 @@
 from flask import Flask, render_template, request, redirect, url_for, send_file
 import sqlite3, io, openpyxl
+from app import create_app
 
-
-app = Flask(__name__)
-
+#app = Flask(__name__)
+app = create_app()
 # --- Инициализация базы ---
 def init_db():
     conn = sqlite3.connect("equipment.db")
