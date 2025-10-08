@@ -1,47 +1,49 @@
 from flask import Flask, render_template, request, redirect, url_for, send_file
-import sqlite3, io, openpyxl
+import io, openpyxl
 import os
+import psycopg2
 
 app = Flask(__name__)
 
-# Определяем путь к базе данных
-def get_db_path():
-    if os.environ.get('RAILWAY_ENVIRONMENT'):
-        # На Railway используем временную директорию
-        return '/tmp/equipment.db'
+# Функция для подключения к БД
+def get_db_connection():
+    # Получаем URL базы данных из переменных окружения Railway
+    database_url = os.environ.get('DATABASE_URL')
+    
+    if database_url:
+        # Исправляем URL для psycopg2
+        if database_url.startswith("postgres://"):
+            database_url = database_url.replace("postgres://", "postgresql://", 1)
+        conn = psycopg2.connect(database_url)
+        return conn
     else:
-        # Локально используем текущую директорию
-        return 'equipment.db'
+        # Для локальной разработки (если нужно)
+        raise Exception("DATABASE_URL not set")
 
 # --- Инициализация базы ---
 def init_db():
-    db_path = get_db_path()
-    conn = sqlite3.connect(db_path)
-    c = conn.cursor()
-    c.execute('''CREATE TABLE IF NOT EXISTS rooms
-                 (id INTEGER PRIMARY KEY AUTOINCREMENT,
+    conn = get_db_connection()
+    cur = conn.cursor()
+    
+    # Создаем таблицы
+    cur.execute('''CREATE TABLE IF NOT EXISTS rooms
+                 (id SERIAL PRIMARY KEY,
                   name TEXT,
                   number TEXT,
                   floor TEXT,
                   teacher TEXT,
                   capacity INTEGER)''')
-    c.execute('''CREATE TABLE IF NOT EXISTS items
-                 (id INTEGER PRIMARY KEY AUTOINCREMENT,
-                  room_id INTEGER,
+    
+    cur.execute('''CREATE TABLE IF NOT EXISTS items
+                 (id SERIAL PRIMARY KEY,
+                  room_id INTEGER REFERENCES rooms(id),
                   name TEXT,
                   inventory_number TEXT,
-                  status TEXT,
-                  FOREIGN KEY(room_id) REFERENCES rooms(id))''')
+                  status TEXT)''')
 
     conn.commit()
+    cur.close()
     conn.close()
-
-# Функция для подключения к БД
-def get_db_connection():
-    db_path = get_db_path()
-    conn = sqlite3.connect(db_path)
-    conn.row_factory = sqlite3.Row  # Для доступа к колонкам по имени
-    return conn
 
 # Инициализируем БД при запуске
 init_db()
@@ -65,22 +67,22 @@ def rooms():
     capacity_max = request.args.get("capacity_max")
 
     if name:
-        filters.append("name LIKE ?")
+        filters.append("name ILIKE %s")
         params.append(f"%{name}%")
     if number:
-        filters.append("number LIKE ?")
+        filters.append("number ILIKE %s")
         params.append(f"%{number}%")
     if floor:
-        filters.append("floor LIKE ?")
+        filters.append("floor ILIKE %s")
         params.append(f"%{floor}%")
     if teacher:
-        filters.append("teacher LIKE ?")
+        filters.append("teacher ILIKE %s")
         params.append(f"%{teacher}%")
     if capacity_min:
-        filters.append("capacity >= ?")
+        filters.append("capacity >= %s")
         params.append(capacity_min)
     if capacity_max:
-        filters.append("capacity <= ?")
+        filters.append("capacity <= %s")
         params.append(capacity_max)
 
     query = "SELECT * FROM rooms"
@@ -89,10 +91,22 @@ def rooms():
     query += " ORDER BY number"
 
     conn = get_db_connection()
-    c = conn.cursor()
-    c.execute(query, params)
-    rooms = c.fetchall()
+    cur = conn.cursor()
+    cur.execute(query, params)
+    rooms_data = cur.fetchall()
     conn.close()
+
+    # Преобразуем в список словарей для удобства
+    rooms = []
+    for room in rooms_data:
+        rooms.append({
+            'id': room[0],
+            'name': room[1],
+            'number': room[2],
+            'floor': room[3],
+            'teacher': room[4],
+            'capacity': room[5]
+        })
 
     return render_template("rooms.html", rooms=rooms,
                            name=name or "",
@@ -113,9 +127,9 @@ def add_room():
         capacity = request.form["capacity"]
 
         conn = get_db_connection()
-        c = conn.cursor()
-        c.execute(
-            "INSERT INTO rooms (name, number, floor, teacher, capacity) VALUES (?, ?, ?, ?, ?)",
+        cur = conn.cursor()
+        cur.execute(
+            "INSERT INTO rooms (name, number, floor, teacher, capacity) VALUES (%s, %s, %s, %s, %s)",
             (name, number, floor, teacher, capacity)
         )
         conn.commit()
@@ -127,21 +141,45 @@ def add_room():
 @app.route("/rooms/<int:room_id>")
 def room_detail(room_id):
     conn = get_db_connection()
-    c = conn.cursor()
-    c.execute("SELECT * FROM rooms WHERE id=?", (room_id,))
-    room = c.fetchone()
-    c.execute("SELECT * FROM items WHERE room_id=?", (room_id,))
-    items = c.fetchall()
+    cur = conn.cursor()
+    
+    cur.execute("SELECT * FROM rooms WHERE id=%s", (room_id,))
+    room_data = cur.fetchone()
+    cur.execute("SELECT * FROM items WHERE room_id=%s", (room_id,))
+    items_data = cur.fetchall()
     conn.close()
-    return render_template("room_detail.html", room=room, items=items)
+    
+    if room_data:
+        room = {
+            'id': room_data[0],
+            'name': room_data[1],
+            'number': room_data[2],
+            'floor': room_data[3],
+            'teacher': room_data[4],
+            'capacity': room_data[5]
+        }
+        
+        items = []
+        for item in items_data:
+            items.append({
+                'id': item[0],
+                'room_id': item[1],
+                'name': item[2],
+                'inventory_number': item[3],
+                'status': item[4]
+            })
+        
+        return render_template("room_detail.html", room=room, items=items)
+    else:
+        return "Кабинет не найден", 404
 
 # --- Удаление кабинета ---
 @app.route("/rooms/<int:room_id>/delete")
 def delete_room(room_id):
     conn = get_db_connection()
-    c = conn.cursor()
-    c.execute("DELETE FROM items WHERE room_id=?", (room_id,))
-    c.execute("DELETE FROM rooms WHERE id=?", (room_id,))
+    cur = conn.cursor()
+    cur.execute("DELETE FROM items WHERE room_id=%s", (room_id,))
+    cur.execute("DELETE FROM rooms WHERE id=%s", (room_id,))
     conn.commit()
     conn.close()
     return redirect(url_for("rooms"))
@@ -155,8 +193,8 @@ def add_item(room_id):
         status = request.form["status"]
 
         conn = get_db_connection()
-        c = conn.cursor()
-        c.execute("INSERT INTO items (room_id, name, inventory_number, status) VALUES (?, ?, ?, ?)",
+        cur = conn.cursor()
+        cur.execute("INSERT INTO items (room_id, name, inventory_number, status) VALUES (%s, %s, %s, %s)",
                   (room_id, name, inventory_number, status))
         conn.commit()
         conn.close()
@@ -167,8 +205,8 @@ def add_item(room_id):
 @app.route("/items/<int:item_id>/delete/<int:room_id>")
 def delete_item(item_id, room_id):
     conn = get_db_connection()
-    c = conn.cursor()
-    c.execute("DELETE FROM items WHERE id=?", (item_id,))
+    cur = conn.cursor()
+    cur.execute("DELETE FROM items WHERE id=%s", (item_id,))
     conn.commit()
     conn.close()
     return redirect(url_for("room_detail", room_id=room_id))
@@ -177,7 +215,8 @@ def delete_item(item_id, room_id):
 @app.route("/rooms/<int:room_id>/edit", methods=["GET", "POST"])
 def edit_room(room_id):
     conn = get_db_connection()
-    c = conn.cursor()
+    cur = conn.cursor()
+    
     if request.method == "POST":
         name = request.form["name"]
         number = request.form["number"]
@@ -185,41 +224,65 @@ def edit_room(room_id):
         teacher = request.form["teacher"]
         capacity = request.form["capacity"]
 
-        c.execute("""UPDATE rooms 
-                     SET name=?, number=?, floor=?, teacher=?, capacity=? 
-                     WHERE id=?""",
+        cur.execute("""UPDATE rooms 
+                     SET name=%s, number=%s, floor=%s, teacher=%s, capacity=%s 
+                     WHERE id=%s""",
                   (name, number, floor, teacher, capacity, room_id))
         conn.commit()
         conn.close()
         return redirect(url_for("rooms"))
 
-    c.execute("SELECT * FROM rooms WHERE id=?", (room_id,))
-    room = c.fetchone()
+    cur.execute("SELECT * FROM rooms WHERE id=%s", (room_id,))
+    room_data = cur.fetchone()
     conn.close()
-    return render_template("edit_room.html", room=room)
+    
+    if room_data:
+        room = {
+            'id': room_data[0],
+            'name': room_data[1],
+            'number': room_data[2],
+            'floor': room_data[3],
+            'teacher': room_data[4],
+            'capacity': room_data[5]
+        }
+        return render_template("edit_room.html", room=room)
+    else:
+        return "Кабинет не найден", 404
 
 # --- Редактирование инвентаря ---
 @app.route("/items/<int:item_id>/edit/<int:room_id>", methods=["GET", "POST"])
 def edit_item(item_id, room_id):
     conn = get_db_connection()
-    c = conn.cursor()
+    cur = conn.cursor()
+    
     if request.method == "POST":
         name = request.form["name"]
         inventory_number = request.form["inventory_number"]
         status = request.form["status"]
 
-        c.execute("""UPDATE items 
-                     SET name=?, inventory_number=?, status=? 
-                     WHERE id=?""",
+        cur.execute("""UPDATE items 
+                     SET name=%s, inventory_number=%s, status=%s 
+                     WHERE id=%s""",
                   (name, inventory_number, status, item_id))
         conn.commit()
         conn.close()
         return redirect(url_for("room_detail", room_id=room_id))
 
-    c.execute("SELECT * FROM items WHERE id=?", (item_id,))
-    item = c.fetchone()
+    cur.execute("SELECT * FROM items WHERE id=%s", (item_id,))
+    item_data = cur.fetchone()
     conn.close()
-    return render_template("edit_item.html", item=item, room_id=room_id)
+    
+    if item_data:
+        item = {
+            'id': item_data[0],
+            'room_id': item_data[1],
+            'name': item_data[2],
+            'inventory_number': item_data[3],
+            'status': item_data[4]
+        }
+        return render_template("edit_item.html", item=item, room_id=room_id)
+    else:
+        return "Предмет не найден", 404
 
 # --- Просмотр всего инвентаря ---
 @app.route("/items")
@@ -234,19 +297,19 @@ def all_items():
     room_number = request.args.get("room_number")
 
     if name:
-        filters.append("items.name LIKE ?")
+        filters.append("items.name ILIKE %s")
         params.append(f"%{name}%")
     if inventory_number:
-        filters.append("items.inventory_number LIKE ?")
+        filters.append("items.inventory_number ILIKE %s")
         params.append(f"%{inventory_number}%")
     if status:
-        filters.append("items.status = ?")
+        filters.append("items.status = %s")
         params.append(status)
     if room_name:
-        filters.append("rooms.name LIKE ?")
+        filters.append("rooms.name ILIKE %s")
         params.append(f"%{room_name}%")
     if room_number:
-        filters.append("rooms.number LIKE ?")
+        filters.append("rooms.number ILIKE %s")
         params.append(f"%{room_number}%")
 
     query = """SELECT items.id, items.name, items.inventory_number, items.status,
@@ -258,10 +321,22 @@ def all_items():
     query += " ORDER BY rooms.number"
 
     conn = get_db_connection()
-    c = conn.cursor()
-    c.execute(query, params)
-    items = c.fetchall()
+    cur = conn.cursor()
+    cur.execute(query, params)
+    items_data = cur.fetchall()
     conn.close()
+
+    items = []
+    for item in items_data:
+        items.append({
+            'id': item[0],
+            'name': item[1],
+            'inventory_number': item[2],
+            'status': item[3],
+            'room_name': item[4],
+            'room_number': item[5],
+            'room_id': item[6]
+        })
 
     return render_template("all_items.html", items=items,
                            name=name or "",
@@ -283,22 +358,22 @@ def export_rooms():
     capacity_max = request.args.get("capacity_max")
 
     if name:
-        filters.append("name LIKE ?")
+        filters.append("name ILIKE %s")
         params.append(f"%{name}%")
     if number:
-        filters.append("number LIKE ?")
+        filters.append("number ILIKE %s")
         params.append(f"%{number}%")
     if floor:
-        filters.append("floor LIKE ?")
+        filters.append("floor ILIKE %s")
         params.append(f"%{floor}%")
     if teacher:
-        filters.append("teacher LIKE ?")
+        filters.append("teacher ILIKE %s")
         params.append(f"%{teacher}%")
     if capacity_min:
-        filters.append("capacity >= ?")
+        filters.append("capacity >= %s")
         params.append(capacity_min)
     if capacity_max:
-        filters.append("capacity <= ?")
+        filters.append("capacity <= %s")
         params.append(capacity_max)
 
     query = "SELECT * FROM rooms"
@@ -307,9 +382,9 @@ def export_rooms():
     query += " ORDER BY number"
 
     conn = get_db_connection()
-    c = conn.cursor()
-    c.execute(query, params)
-    rooms = c.fetchall()
+    cur = conn.cursor()
+    cur.execute(query, params)
+    rooms_data = cur.fetchall()
     conn.close()
 
     # Создаём Excel
@@ -320,8 +395,8 @@ def export_rooms():
     headers = ["ID", "Название", "Номер", "Этаж", "Учитель", "Вместимость"]
     ws.append(headers)
 
-    for r in rooms:
-        ws.append(r)
+    for r in rooms_data:
+        ws.append(list(r))
 
     # Отправляем файл
     output = io.BytesIO()
@@ -345,19 +420,19 @@ def export_items():
     room_number = request.args.get("room_number")
 
     if name:
-        filters.append("items.name LIKE ?")
+        filters.append("items.name ILIKE %s")
         params.append(f"%{name}%")
     if inventory_number:
-        filters.append("items.inventory_number LIKE ?")
+        filters.append("items.inventory_number ILIKE %s")
         params.append(f"%{inventory_number}%")
     if status:
-        filters.append("items.status = ?")
+        filters.append("items.status = %s")
         params.append(status)
     if room_name:
-        filters.append("rooms.name LIKE ?")
+        filters.append("rooms.name ILIKE %s")
         params.append(f"%{room_name}%")
     if room_number:
-        filters.append("rooms.number LIKE ?")
+        filters.append("rooms.number ILIKE %s")
         params.append(f"%{room_number}%")
 
     query = """SELECT items.id, items.name, items.inventory_number, items.status,
@@ -369,9 +444,9 @@ def export_items():
     query += " ORDER BY rooms.number"
 
     conn = get_db_connection()
-    c = conn.cursor()
-    c.execute(query, params)
-    items = c.fetchall()
+    cur = conn.cursor()
+    cur.execute(query, params)
+    items_data = cur.fetchall()
     conn.close()
 
     wb = openpyxl.Workbook()
@@ -381,8 +456,8 @@ def export_items():
     headers = ["ID", "Название", "Инв. номер", "Статус", "Кабинет", "Номер кабинета"]
     ws.append(headers)
 
-    for i in items:
-        ws.append(i)
+    for i in items_data:
+        ws.append(list(i))
 
     output = io.BytesIO()
     wb.save(output)
