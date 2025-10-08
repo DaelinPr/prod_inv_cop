@@ -4,9 +4,19 @@ import os
 
 app = Flask(__name__)
 
+# Определяем путь к базе данных
+def get_db_path():
+    if os.environ.get('RAILWAY_ENVIRONMENT'):
+        # На Railway используем временную директорию
+        return '/tmp/equipment.db'
+    else:
+        # Локально используем текущую директорию
+        return 'equipment.db'
+
 # --- Инициализация базы ---
 def init_db():
-    conn = sqlite3.connect("equipment.db")
+    db_path = get_db_path()
+    conn = sqlite3.connect(db_path)
     c = conn.cursor()
     c.execute('''CREATE TABLE IF NOT EXISTS rooms
                  (id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -26,12 +36,20 @@ def init_db():
     conn.commit()
     conn.close()
 
+# Функция для подключения к БД
+def get_db_connection():
+    db_path = get_db_path()
+    conn = sqlite3.connect(db_path)
+    conn.row_factory = sqlite3.Row  # Для доступа к колонкам по имени
+    return conn
+
+# Инициализируем БД при запуске
+init_db()
 
 # --- Главная страница ---
 @app.route("/")
 def home():
     return render_template("home.html")
-
 
 # --- Список кабинетов ---
 @app.route("/rooms")
@@ -70,7 +88,7 @@ def rooms():
         query += " WHERE " + " AND ".join(filters)
     query += " ORDER BY number"
 
-    conn = sqlite3.connect("equipment.db")
+    conn = get_db_connection()
     c = conn.cursor()
     c.execute(query, params)
     rooms = c.fetchall()
@@ -84,9 +102,6 @@ def rooms():
                            capacity_min=capacity_min or "",
                            capacity_max=capacity_max or "")
 
-
-
-
 # --- Добавление кабинета ---
 @app.route("/rooms/add", methods=["GET", "POST"])
 def add_room():
@@ -97,7 +112,7 @@ def add_room():
         teacher = request.form["teacher"]
         capacity = request.form["capacity"]
 
-        conn = sqlite3.connect("equipment.db")
+        conn = get_db_connection()
         c = conn.cursor()
         c.execute(
             "INSERT INTO rooms (name, number, floor, teacher, capacity) VALUES (?, ?, ?, ?, ?)",
@@ -108,11 +123,10 @@ def add_room():
         return redirect(url_for("rooms"))
     return render_template("add_room.html")
 
-
 # --- Просмотр кабинета и его инвентаря ---
 @app.route("/rooms/<int:room_id>")
 def room_detail(room_id):
-    conn = sqlite3.connect("equipment.db")
+    conn = get_db_connection()
     c = conn.cursor()
     c.execute("SELECT * FROM rooms WHERE id=?", (room_id,))
     room = c.fetchone()
@@ -121,11 +135,10 @@ def room_detail(room_id):
     conn.close()
     return render_template("room_detail.html", room=room, items=items)
 
-
 # --- Удаление кабинета ---
 @app.route("/rooms/<int:room_id>/delete")
 def delete_room(room_id):
-    conn = sqlite3.connect("equipment.db")
+    conn = get_db_connection()
     c = conn.cursor()
     c.execute("DELETE FROM items WHERE room_id=?", (room_id,))
     c.execute("DELETE FROM rooms WHERE id=?", (room_id,))
@@ -141,7 +154,7 @@ def add_item(room_id):
         inventory_number = request.form["inventory_number"]
         status = request.form["status"]
 
-        conn = sqlite3.connect("equipment.db")
+        conn = get_db_connection()
         c = conn.cursor()
         c.execute("INSERT INTO items (room_id, name, inventory_number, status) VALUES (?, ?, ?, ?)",
                   (room_id, name, inventory_number, status))
@@ -150,22 +163,20 @@ def add_item(room_id):
         return redirect(url_for("room_detail", room_id=room_id))
     return render_template("add_item.html", room_id=room_id)
 
-
 # --- Удаление предмета ---
 @app.route("/items/<int:item_id>/delete/<int:room_id>")
 def delete_item(item_id, room_id):
-    conn = sqlite3.connect("equipment.db")
+    conn = get_db_connection()
     c = conn.cursor()
     c.execute("DELETE FROM items WHERE id=?", (item_id,))
     conn.commit()
     conn.close()
     return redirect(url_for("room_detail", room_id=room_id))
 
-
 # --- Редактирование кабинета ---
 @app.route("/rooms/<int:room_id>/edit", methods=["GET", "POST"])
 def edit_room(room_id):
-    conn = sqlite3.connect("equipment.db")
+    conn = get_db_connection()
     c = conn.cursor()
     if request.method == "POST":
         name = request.form["name"]
@@ -187,11 +198,10 @@ def edit_room(room_id):
     conn.close()
     return render_template("edit_room.html", room=room)
 
-
 # --- Редактирование инвентаря ---
 @app.route("/items/<int:item_id>/edit/<int:room_id>", methods=["GET", "POST"])
 def edit_item(item_id, room_id):
-    conn = sqlite3.connect("equipment.db")
+    conn = get_db_connection()
     c = conn.cursor()
     if request.method == "POST":
         name = request.form["name"]
@@ -211,8 +221,7 @@ def edit_item(item_id, room_id):
     conn.close()
     return render_template("edit_item.html", item=item, room_id=room_id)
 
-
-# --- Просмотри всего инвентаря ---
+# --- Просмотр всего инвентаря ---
 @app.route("/items")
 def all_items():
     filters = []
@@ -248,7 +257,7 @@ def all_items():
         query += " WHERE " + " AND ".join(filters)
     query += " ORDER BY rooms.number"
 
-    conn = sqlite3.connect("equipment.db")
+    conn = get_db_connection()
     c = conn.cursor()
     c.execute(query, params)
     items = c.fetchall()
@@ -260,7 +269,6 @@ def all_items():
                            status=status or "",
                            room_name=room_name or "",
                            room_number=room_number or "")
-
 
 @app.route("/rooms/export")
 def export_rooms():
@@ -298,7 +306,7 @@ def export_rooms():
         query += " WHERE " + " AND ".join(filters)
     query += " ORDER BY number"
 
-    conn = sqlite3.connect("equipment.db")
+    conn = get_db_connection()
     c = conn.cursor()
     c.execute(query, params)
     rooms = c.fetchall()
@@ -360,7 +368,7 @@ def export_items():
         query += " WHERE " + " AND ".join(filters)
     query += " ORDER BY rooms.number"
 
-    conn = sqlite3.connect("equipment.db")
+    conn = get_db_connection()
     c = conn.cursor()
     c.execute(query, params)
     items = c.fetchall()
@@ -384,10 +392,6 @@ def export_items():
                      as_attachment=True,
                      download_name="items.xlsx",
                      mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
-
-
-
-
 
 if __name__ == '__main__':
     port = int(os.environ.get('PORT', 5000))
