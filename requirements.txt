@@ -51,4 +51,5 @@ tzdata==2025.2
 urllib3==2.5.0
 watchdog==6.0.0
 Werkzeug==2.3.7
+psycopg2-binary==2.9.9
 
