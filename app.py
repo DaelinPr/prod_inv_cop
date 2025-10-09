@@ -8,7 +8,20 @@ app = Flask(__name__)
 
 # Функция для получения DATABASE_URL
 def get_database_url():
-    # Railway создает DATABASE_PUBLIC_URL для внешнего подключения
+    # Сначала пробуем собрать URL из отдельных переменных (самый надежный способ)
+    pg_user = os.environ.get('PGUSER') or os.environ.get('POSTGRES_USER')
+    pg_password = os.environ.get('PGPASSWORD') or os.environ.get('POSTGRES_PASSWORD')
+    pg_host = os.environ.get('PGHOST')
+    pg_port = os.environ.get('PGPORT')
+    pg_database = os.environ.get('PGDATABASE') or os.environ.get('POSTGRES_DB')
+    
+    # Если все отдельные переменные есть, собираем URL вручную
+    if all([pg_user, pg_password, pg_host, pg_port, pg_database]):
+        database_url = f"postgresql://{pg_user}:{pg_password}@{pg_host}:{pg_port}/{pg_database}"
+        print(f"Using database URL from individual variables: postgresql://{pg_user}:***@{pg_host}:{pg_port}/{pg_database}")
+        return database_url
+    
+    # Если нет, пробуем DATABASE_PUBLIC_URL
     database_url = os.environ.get('DATABASE_PUBLIC_URL')
     
     # Если нет PUBLIC_URL, пробуем обычный DATABASE_URL
@@ -20,15 +33,29 @@ def get_database_url():
         database_url = os.environ.get('POSTGRESQL_URL') or os.environ.get('POSTGRES_URL')
     
     if not database_url:
-        # Для отладки выведем все переменные среды
-        print("Available environment variables:", list(os.environ.keys()))
-        raise Exception("DATABASE_URL not found in environment variables")
+        # Для отладки выведем все переменные среды связанные с БД
+        db_vars = {}
+        for key in os.environ.keys():
+            if any(db_word in key.upper() for db_word in ['DATABASE', 'POSTGRES', 'PG']):
+                value = os.environ[key]
+                if 'PASSWORD' in key.upper():
+                    value = '***HIDDEN***'
+                db_vars[key] = value
+        print("Available database environment variables:", db_vars)
+        raise Exception("No database connection string found in environment variables")
     
     # Исправляем URL для psycopg2
     if database_url.startswith("postgres://"):
         database_url = database_url.replace("postgres://", "postgresql://", 1)
     
-    print(f"Using database URL: {database_url.split('@')[0]}...@...")  # Логируем без пароля
+    # Логируем без пароля для безопасности
+    safe_url = database_url
+    if '@' in database_url:
+        user_part = database_url.split('@')[0]
+        host_part = database_url.split('@')[1].split('/')[0]
+        safe_url = user_part.split(':')[0] + ':***@' + host_part
+    
+    print(f"Using database URL: {safe_url}")
     return database_url
 
 # Функция для подключения к БД
@@ -425,6 +452,40 @@ def debug():
         "database_initialized": db_initialized,
         "database_url_exists": 'DATABASE_PUBLIC_URL' in os.environ or 'DATABASE_URL' in os.environ
     }
+
+# --- Диагностика базы данных ---
+@app.route("/db-test")
+def db_test():
+    try:
+        # Пробуем подключиться к базе
+        conn = get_db_connection()
+        cur = conn.cursor()
+        cur.execute("SELECT version(), current_database(), current_user")
+        db_info = cur.fetchone()
+        cur.close()
+        conn.close()
+        
+        return {
+            "status": "SUCCESS",
+            "postgres_version": db_info[0],
+            "database_name": db_info[1],
+            "current_user": db_info[2],
+            "message": "База данных подключена успешно!"
+        }
+    except Exception as e:
+        return {
+            "status": "FAILED",
+            "error": str(e),
+            "environment_variables": {
+                "PGHOST": os.environ.get('PGHOST'),
+                "PGPORT": os.environ.get('PGPORT'),
+                "PGDATABASE": os.environ.get('PGDATABASE'),
+                "PGUSER": os.environ.get('PGUSER'),
+                "PGPASSWORD": "***HIDDEN***" if os.environ.get('PGPASSWORD') else None,
+                "DATABASE_PUBLIC_URL_exists": bool(os.environ.get('DATABASE_PUBLIC_URL')),
+                "DATABASE_URL_exists": bool(os.environ.get('DATABASE_URL'))
+            }
+        }
 
 if __name__ == '__main__':
     port = int(os.environ.get('PORT', 5000))
