@@ -487,59 +487,6 @@ def db_test():
             }
         }
 
-# --- Экспорт данных ---
-@app.route("/export")
-@check_db
-def export_items():
-    try:
-        conn = get_db_connection()
-        cur = conn.cursor()
-
-        # Получаем все предметы с информацией о кабинетах
-        cur.execute("""
-            SELECT items.inventory_number, items.name, items.status, 
-                   rooms.name as room_name, rooms.number as room_number
-            FROM items
-            JOIN rooms ON items.room_id = rooms.id
-            ORDER BY rooms.number, items.name
-        """)
-        items_data = cur.fetchall()
-
-        # Создаем Excel файл
-        output = io.BytesIO()
-        workbook = openpyxl.Workbook()
-        sheet = workbook.active
-        sheet.title = "Инвентарь"
-
-        # Заголовки
-        headers = ['Инвентарный номер', 'Наименование', 'Статус', 'Кабинет', 'Номер кабинета']
-        for col, header in enumerate(headers, 1):
-            sheet.cell(row=1, column=col, value=header)
-
-        # Данные
-        for row, item in enumerate(items_data, 2):
-            sheet.cell(row=row, column=1, value=item[0])  # inventory_number
-            sheet.cell(row=row, column=2, value=item[1])  # name
-            sheet.cell(row=row, column=3, value=item[2])  # status
-            sheet.cell(row=row, column=4, value=item[3])  # room_name
-            sheet.cell(row=row, column=5, value=item[4])  # room_number
-
-        workbook.save(output)
-        output.seek(0)
-
-        cur.close()
-        conn.close()
-
-        return send_file(
-            output,
-            as_attachment=True,
-            download_name="inventory_export.xlsx",
-            mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-        )
-
-    except Exception as e:
-        return f"Ошибка при экспорте: {str(e)}", 500
-
 # --- Экспорт кабинетов в Excel ---
 @app.route("/export-rooms")
 @check_db
