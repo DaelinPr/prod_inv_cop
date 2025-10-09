@@ -88,11 +88,11 @@ else:
 # Декоратор для проверки доступности БД
 def check_db(f):
     def decorated_function(*args, **kwargs):
+        global db_initialized  # Переместили global в начало функции
         if not db_initialized:
             try:
                 # Пробуем переинициализировать
                 if init_db():
-                    global db_initialized
                     db_initialized = True
                 else:
                     return "База данных временно недоступна. Пожалуйста, попробуйте позже.", 503
@@ -284,9 +284,6 @@ def add_item(room_id):
         except Exception as e:
             return f"Ошибка при добавлении: {str(e)}", 500
     return render_template("add_item.html", room_id=room_id)
-
-# Остальные маршруты (edit_room, edit_item, all_items, export) остаются аналогичными
-# Для краткости покажу только основные, остальные нужно добавить по аналогии
 
 @app.route("/items/<int:item_id>/delete/<int:room_id>")
 @check_db
