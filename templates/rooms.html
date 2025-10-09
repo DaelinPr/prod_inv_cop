@@ -59,16 +59,16 @@
     <tbody>
         {% for room in rooms %}
         <tr>
-            <td>{{ room[0] }}</td>
-            <td>{{ room[1] }}</td>
-            <td>{{ room[2] }}</td>
-            <td>{{ room[3] }}</td>
-            <td>{{ room[4] }}</td>
-            <td>{{ room[5] }}</td>
+            <td>{{ room.id }}</td>
+            <td>{{ room.name }}</td>
+            <td>{{ room.number }}</td>
+            <td>{{ room.floor }}</td>
+            <td>{{ room.teacher }}</td>
+            <td>{{ room.capacity }}</td>
             <td>
-                <a href="/rooms/{{ room[0] }}" class="btn btn-info btn-sm">Просмотреть</a>
-                <a href="/rooms/{{ room[0] }}/edit" class="btn btn-warning btn-sm">Редактировать</a>
-                <a href="/rooms/{{ room[0] }}/delete" class="btn btn-danger btn-sm">Удалить</a>
+                <a href="/rooms/{{ room.id }}" class="btn btn-info btn-sm">Просмотреть</a>
+                <a href="/rooms/{{ room.id }}/edit" class="btn btn-warning btn-sm">Редактировать</a>
+                <a href="/rooms/{{ room.id }}/delete" class="btn btn-danger btn-sm">Удалить</a>
             </td>
         </tr>
         {% endfor %}
