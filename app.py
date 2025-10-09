@@ -540,6 +540,87 @@ def export_items():
     except Exception as e:
         return f"Ошибка при экспорте: {str(e)}", 500
 
+# --- Экспорт кабинетов ---
+@app.route("/export-rooms")
+@check_db
+def export_rooms():
+    try:
+        conn = get_db_connection()
+        cur = conn.cursor()
+
+        # Получаем параметры фильтрации
+        name = request.args.get("name")
+        number = request.args.get("number")
+        floor = request.args.get("floor")
+        teacher = request.args.get("teacher")
+        capacity_min = request.args.get("capacity_min")
+        capacity_max = request.args.get("capacity_max")
+
+        filters = []
+        params = []
+
+        if name:
+            filters.append("name ILIKE %s")
+            params.append(f"%{name}%")
+        if number:
+            filters.append("number ILIKE %s")
+            params.append(f"%{number}%")
+        if floor:
+            filters.append("floor ILIKE %s")
+            params.append(f"%{floor}%")
+        if teacher:
+            filters.append("teacher ILIKE %s")
+            params.append(f"%{teacher}%")
+        if capacity_min:
+            filters.append("capacity >= %s")
+            params.append(capacity_min)
+        if capacity_max:
+            filters.append("capacity <= %s")
+            params.append(capacity_max)
+
+        query = "SELECT name, number, floor, teacher, capacity FROM rooms"
+        if filters:
+            query += " WHERE " + " AND ".join(filters)
+        query += " ORDER BY number"
+
+        cur.execute(query, params)
+        rooms_data = cur.fetchall()
+
+        # Создаем Excel файл
+        output = io.BytesIO()
+        workbook = openpyxl.Workbook()
+        sheet = workbook.active
+        sheet.title = "Кабинеты"
+
+        # Заголовки
+        headers = ['Название', 'Номер', 'Этаж', 'Преподаватель', 'Вместимость']
+        for col, header in enumerate(headers, 1):
+            sheet.cell(row=1, column=col, value=header)
+
+        # Данные
+        for row, room in enumerate(rooms_data, 2):
+            sheet.cell(row=row, column=1, value=room[0])  # name
+            sheet.cell(row=row, column=2, value=room[1])  # number
+            sheet.cell(row=row, column=3, value=room[2])  # floor
+            sheet.cell(row=row, column=4, value=room[3])  # teacher
+            sheet.cell(row=row, column=5, value=room[4])  # capacity
+
+        workbook.save(output)
+        output.seek(0)
+
+        cur.close()
+        conn.close()
+
+        return send_file(
+            output,
+            as_attachment=True,
+            download_name="rooms_export.xlsx",
+            mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+        )
+
+    except Exception as e:
+        return f"Ошибка при экспорте: {str(e)}", 500
+
 if __name__ == '__main__':
     port = int(os.environ.get('PORT', 5000))
     print(f"Starting server on port {port}")
