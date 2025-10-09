@@ -540,7 +540,7 @@ def export_items():
     except Exception as e:
         return f"Ошибка при экспорте: {str(e)}", 500
 
-# --- Экспорт кабинетов ---
+# --- Экспорт кабинетов в Excel ---
 @app.route("/export-rooms")
 @check_db
 def export_rooms():
@@ -548,14 +548,15 @@ def export_rooms():
         conn = get_db_connection()
         cur = conn.cursor()
 
-        # Получаем параметры фильтрации
-        name = request.args.get("name")
-        number = request.args.get("number")
-        floor = request.args.get("floor")
-        teacher = request.args.get("teacher")
-        capacity_min = request.args.get("capacity_min")
-        capacity_max = request.args.get("capacity_max")
+        # Получаем параметры фильтрации из URL
+        name = request.args.get("name", "")
+        number = request.args.get("number", "")
+        floor = request.args.get("floor", "")
+        teacher = request.args.get("teacher", "")
+        capacity_min = request.args.get("capacity_min", "")
+        capacity_max = request.args.get("capacity_max", "")
 
+        # Строим запрос с фильтрами
         filters = []
         params = []
 
@@ -573,10 +574,10 @@ def export_rooms():
             params.append(f"%{teacher}%")
         if capacity_min:
             filters.append("capacity >= %s")
-            params.append(capacity_min)
+            params.append(int(capacity_min))
         if capacity_max:
             filters.append("capacity <= %s")
-            params.append(capacity_max)
+            params.append(int(capacity_max))
 
         query = "SELECT name, number, floor, teacher, capacity FROM rooms"
         if filters:
@@ -619,7 +620,90 @@ def export_rooms():
         )
 
     except Exception as e:
-        return f"Ошибка при экспорте: {str(e)}", 500
+        return f"Ошибка при экспорте кабинетов: {str(e)}", 500
+
+# --- Экспорт инвентаря в Excel ---
+@app.route("/export-items")
+@check_db
+def export_items():
+    try:
+        conn = get_db_connection()
+        cur = conn.cursor()
+
+        # Получаем параметры фильтрации из URL
+        name = request.args.get("name", "")
+        inventory_number = request.args.get("inventory_number", "")
+        status = request.args.get("status", "")
+        room_name = request.args.get("room_name", "")
+        room_number = request.args.get("room_number", "")
+
+        # Строим запрос с фильтрами
+        filters = []
+        params = []
+
+        if name:
+            filters.append("items.name ILIKE %s")
+            params.append(f"%{name}%")
+        if inventory_number:
+            filters.append("items.inventory_number ILIKE %s")
+            params.append(f"%{inventory_number}%")
+        if status:
+            filters.append("items.status = %s")
+            params.append(status)
+        if room_name:
+            filters.append("rooms.name ILIKE %s")
+            params.append(f"%{room_name}%")
+        if room_number:
+            filters.append("rooms.number ILIKE %s")
+            params.append(f"%{room_number}%")
+
+        query = """
+            SELECT items.inventory_number, items.name, items.status, 
+                   rooms.name as room_name, rooms.number as room_number
+            FROM items
+            JOIN rooms ON items.room_id = rooms.id
+        """
+        if filters:
+            query += " WHERE " + " AND ".join(filters)
+        query += " ORDER BY rooms.number, items.name"
+
+        cur.execute(query, params)
+        items_data = cur.fetchall()
+
+        # Создаем Excel файл
+        output = io.BytesIO()
+        workbook = openpyxl.Workbook()
+        sheet = workbook.active
+        sheet.title = "Инвентарь"
+
+        # Заголовки
+        headers = ['Инвентарный номер', 'Наименование', 'Статус', 'Кабинет', 'Номер кабинета']
+        for col, header in enumerate(headers, 1):
+            sheet.cell(row=1, column=col, value=header)
+
+        # Данные
+        for row, item in enumerate(items_data, 2):
+            sheet.cell(row=row, column=1, value=item[0])  # inventory_number
+            sheet.cell(row=row, column=2, value=item[1])  # name
+            sheet.cell(row=row, column=3, value=item[2])  # status
+            sheet.cell(row=row, column=4, value=item[3])  # room_name
+            sheet.cell(row=row, column=5, value=item[4])  # room_number
+
+        workbook.save(output)
+        output.seek(0)
+
+        cur.close()
+        conn.close()
+
+        return send_file(
+            output,
+            as_attachment=True,
+            download_name="inventory_export.xlsx",
+            mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+        )
+
+    except Exception as e:
+        return f"Ошибка при экспорте инвентаря: {str(e)}", 500
 
 if __name__ == '__main__':
     port = int(os.environ.get('PORT', 5000))
