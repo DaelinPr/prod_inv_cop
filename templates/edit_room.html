@@ -7,23 +7,23 @@
 <form method="POST">
     <div class="mb-3">
         <label class="form-label">Название</label>
-        <input type="text" class="form-control" name="name" value="{{ name }}" required>
+        <input type="text" class="form-control" name="name" value="{{ room.name }}" required>
     </div>
     <div class="mb-3">
         <label class="form-label">Номер</label>
-        <input type="text" class="form-control" name="number" value="{{ number }}">
+        <input type="text" class="form-control" name="number" value="{{ room.number }}">
     </div>
     <div class="mb-3">
         <label class="form-label">Этаж</label>
-        <input type="text" class="form-control" name="floor" value="{{ floor }}">
+        <input type="text" class="form-control" name="floor" value="{{ room.floor }}">
     </div>
     <div class="mb-3">
         <label class="form-label">Учитель</label>
-        <input type="text" class="form-control" name="teacher" value="{{ teacher }}">
+        <input type="text" class="form-control" name="teacher" value="{{ room.teacher }}">
     </div>
     <div class="mb-3">
         <label class="form-label">Вместимость</label>
-        <input type="number" class="form-control" name="capacity" value="{{ capacity }}">
+        <input type="number" class="form-control" name="capacity" value="{{ room.capacity }}">
     </div>
     <button type="submit" class="btn btn-success">Сохранить</button>
     <a href="/rooms" class="btn btn-secondary">Отмена</a>
