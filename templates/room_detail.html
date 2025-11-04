@@ -33,6 +33,7 @@
             <td>{{ item.status }}</td>
             <td>
                 <a href="/items/{{ item.id }}/delete/{{ room.id }}" class="btn btn-danger btn-sm">Удалить</a>
+                <a href="/items/{{ item[0] }}/edit/{{ item[6] }}" class="btn btn-warning btn-sm">Редактировать</a>
                 <a href="/items" class="btn btn-dark btn-sm">Весь инвентарь</a>
             </td>
         </tr>
