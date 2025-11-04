@@ -5,20 +5,21 @@
 {% block content %}
 <h1>Редактировать инвентарь</h1>
 <form method="POST">
+    <input type="hidden" name="room_id" value="{{ room_id }}">
     <div class="mb-3">
         <label class="form-label">Название</label>
-        <input type="text" class="form-control" name="name" value="{{ item[2] }}" required>
+        <input type="text" class="form-control" name="name" value="{{ item.name }}" required>
     </div>
     <div class="mb-3">
         <label class="form-label">Инвентарный номер</label>
-        <input type="text" class="form-control" name="inventory_number" value="{{ item[3] }}" required>
+        <input type="text" class="form-control" name="inventory_number" value="{{ item.inventory_number }}" required>
     </div>
     <div class="mb-3">
         <label class="form-label">Статус</label>
         <select class="form-select" name="status" required>
-            <option value="Работает" {% if item[4] == "Работает" %}selected{% endif %}>Работает</option>
-            <option value="Не работает" {% if item[4] == "Не работает" %}selected{% endif %}>Не работает</option>
-            <option value="Ремонт" {% if item[4] == "Ремонт" %}selected{% endif %}>Ремонт</option>
+            <option value="Работает" {% if item.status == "Работает" %}selected{% endif %}>Работает</option>
+            <option value="Не работает" {% if item.status == "Не работает" %}selected{% endif %}>Не работает</option>
+            <option value="Ремонт" {% if item.status == "Ремонт" %}selected{% endif %}>Ремонт</option>
         </select>
     </div>
     <button type="submit" class="btn btn-success">Сохранить</button>
