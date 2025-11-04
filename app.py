@@ -652,6 +652,51 @@ def export_items():
     except Exception as e:
         return f"Ошибка при экспорте инвентаря: {str(e)}", 500
 
+# --- Редактирование инвентаря ---
+@app.route("/items/<int:item_id>/edit", methods=["GET", "POST"])
+@check_db
+def edit_item(item_id):
+    try:
+        conn = get_db_connection()
+        cur = conn.cursor()
+        
+        if request.method == "POST":
+            name = request.form["name"]
+            inventory_number = request.form["inventory_number"]
+            status = request.form["status"]
+
+            cur.execute("""UPDATE items 
+                         SET name=%s, inventory_number=%s, status=%s 
+                         WHERE id=%s""",
+                      (name, inventory_number, status, item_id))
+            conn.commit()
+            cur.close()
+            conn.close()
+            return redirect(url_for("room_detail", room_id=request.form.get("room_id")))
+
+        # GET запрос - получаем данные предмета
+        cur.execute("SELECT * FROM items WHERE id=%s", (item_id,))
+        item_data = cur.fetchone()
+        
+        if item_data:
+            item = {
+                'id': item_data[0],
+                'room_id': item_data[1],
+                'name': item_data[2],
+                'inventory_number': item_data[3],
+                'status': item_data[4]
+            }
+            cur.close()
+            conn.close()
+            return render_template("edit_item.html", item=item, room_id=item['room_id'])
+        else:
+            cur.close()
+            conn.close()
+            return "Предмет не найден", 404
+            
+    except Exception as e:
+        return f"Ошибка базы данных: {str(e)}", 500
+
 if __name__ == '__main__':
     port = int(os.environ.get('PORT', 5000))
     print(f"Starting server on port {port}")
